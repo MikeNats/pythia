@@ -1,0 +1,90 @@
+#!/bin/bash
+
+if [ "$1" == "server" ]; then
+    echo "🚀 Starting FastAPI development server..."
+    exec uv run fastapi dev app/main.py
+
+elif [ "$1" == "test" ]; then
+    echo "🧪 Running tests..."
+    exec uv run pytest
+
+elif [ "$1" == "check" ]; then
+    # Format + lint-fix + typecheck + tests. Run before every commit.
+    echo "🔎 Format + lint + typecheck + test..."
+    uv run ruff format . \
+      && uv run ruff check . --fix \
+      && uv run mypy app \
+      && uv run pytest \
+      && echo "✅ All clean — format, lint, types, tests."
+
+elif [ "$1" == "db:seed" ]; then
+    echo "🌱 Seeding a demo tenant + user + API key..."
+    exec uv run python -m scripts.seed
+
+elif [ "$1" == "eval" ]; then
+    # ./run eval [judge_model] [answer_model]   — each defaults to llama3.2
+    echo "📊 Running RAG evals (needs DB + Ollama)..."
+    exec uv run python -m scripts.eval "$2" "$3"
+
+elif [ "$1" == "audit" ]; then
+    echo "🔒 Scanning dependencies for known vulnerabilities..."
+    exec uv run pip-audit
+
+elif [ "$1" == "configure" ]; then
+    echo "⚙️  Locking + syncing dependencies..."
+    uv lock
+    uv sync
+    echo "✅ Configuration complete."
+
+elif [ "$1" == "migrate" ]; then
+    # ./run migrate "your message"  → autogenerate a migration from model changes
+    MSG="${2:-migration}"
+    echo "📝 Autogenerating migration: $MSG"
+    uv run alembic revision --autogenerate -m "$MSG"
+
+elif [ "$1" == "upgrade" ]; then
+    # Apply all pending migrations. Keeps your data (unlike db:reset).
+    echo "⬆️  Applying migrations (alembic upgrade head)..."
+    uv run alembic upgrade head \
+      && echo "✅ Database at latest migration."
+
+elif [ "$1" == "rollback-check" ]; then
+    # Prove the latest migration is reversible: up → down → up.
+    echo "🔁 Reversibility check (up → down → up)..."
+    uv run alembic upgrade head \
+      && uv run alembic downgrade -1 \
+      && uv run alembic upgrade head \
+      && echo "✅ Reversible." \
+      || { echo "❌ Migration is NOT cleanly reversible — fix the downgrade()."; exit 1; }
+
+elif [ "$1" == "db:reset" ]; then
+    # Wipe the DB, regenerate the migration from current models, apply.
+    # DEV — throws away migration files. (Fine while models are still changing.)
+    MSG="${2:-init schema}"
+    echo "♻️  Resetting DB from current models..."
+    docker exec -i docq-app-db psql -U docqapp -d docqapp \
+        -c "DROP SCHEMA public CASCADE; CREATE SCHEMA public; CREATE EXTENSION IF NOT EXISTS vector;" \
+      && rm -f alembic/versions/*.py \
+      && uv run alembic revision --autogenerate -m "$MSG" \
+      && uv run alembic upgrade head \
+      && echo "✅ DB reset to match models."
+
+else
+    echo "Usage: ./run <command>"
+    echo ""
+    echo "  App"
+    echo "    server          Start the dev server (hot reload)"
+    echo "    test            Run pytest"
+    echo "    check           Format + lint-fix + typecheck + test (run before commit)"
+    echo "    eval            Run RAG quality evals against a golden set (needs Ollama)"
+    echo "    audit           Scan dependencies for known vulnerabilities (pip-audit)"
+    echo "    configure       Lock + sync deps (writes uv.lock)"
+    echo ""
+    echo "  Database / migrations"
+    echo "    migrate \"msg\"    Autogenerate a migration from model changes"
+    echo "    upgrade         Apply pending migrations (keeps your data)"
+    echo "    rollback-check  Prove the latest migration is reversible (up->down->up)"
+    echo "    db:reset        Wipe DB + regenerate migrations from models, then apply"
+    echo "    db:seed         Create a demo tenant + user + API key (prints the key)"
+    exit 1
+fi

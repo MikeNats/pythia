@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: docqapp
+          POSTGRES_PASSWORD: docqapp
+          POSTGRES_DB: docqapp
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://docqapp:docqapp@localhost:5432/docqapp
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install deps
+        run: uv sync --dev
+
+      - name: Lint + format check (ruff)
+        run: |
+          uv run ruff format --check .
+          uv run ruff check .
+
+      - name: Type-check (mypy --strict)
+        run: uv run mypy app
+
+      - name: Migrate schema
+        run: uv run alembic upgrade head
+
+      - name: Test + coverage floor
+        run: uv run pytest
+
+      - name: Dependency vulnerability audit
+        run: uv run pip-audit
+
+      - name: Secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

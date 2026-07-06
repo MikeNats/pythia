@@ -1,0 +1,20 @@
+services:
+  db:
+    image: pgvector/pgvector:pg16          # Postgres 16 + pgvector (for embeddings later)
+    container_name: docq-app-db
+    environment:
+      POSTGRES_DB: docqapp
+      POSTGRES_USER: docqapp
+      POSTGRES_PASSWORD: docqapp
+    ports:
+      - "5434:5432"                        # 5434 on host — 5433 is the sql-playground
+    volumes:
+      - docq-app-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U docqapp -d docqapp"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  docq-app-data:
