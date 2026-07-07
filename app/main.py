@@ -15,6 +15,7 @@ from app.core.middlewares import AuditLogMiddleware, RequestIdMiddleware
 from app.ingest.router import router as ingest_router
 from app.llm.guardrails import GuardrailError
 from app.llm.router import LLMModelNotFoundError, LLMNotFoundError
+from app.mcp.router import router as mcp_router
 from app.retrieval.router import router as retrieval_router
 
 logger = logging.getLogger("app")
@@ -65,6 +66,7 @@ protected = APIRouter(dependencies=[Depends(get_current_user)])
 
 protected.include_router(ingest_router)
 protected.include_router(retrieval_router)
+protected.include_router(mcp_router)
 
 app.include_router(health_router)
 app.include_router(protected)

@@ -90,8 +90,13 @@ async def test_delete_then_messages_raises(
 
 
 async def test_single_query_no_hits_returns_fallback(
-    session: AsyncSession, user: UserSession
+    session: AsyncSession, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # force zero retrieval hits so the fallback branch runs regardless of DB contents
+    async def _no_hits(*_args: object, **_kwargs: object) -> list[object]:
+        return []
+
+    monkeypatch.setattr("app.retrieval.services.search_query_to_chunks", _no_hits)
     resp = await single_query_to_answer(session, "anything at all", FakeLLM(), k=3)
     assert isinstance(resp, QuestionResponse)
     assert resp.answer == "No relevant context found."

@@ -89,3 +89,19 @@ class IngestService:
         self.session.add_all(docs)
         await self.session.commit()
         return results
+
+    async def ingest_text(
+        self, name: str, text: str, content_type: str = "text/markdown"
+    ) -> Document:
+        """Chunk, embed, and store raw text (e.g. markdown) as one document."""
+        doc = Document(
+            name=name,
+            source_type=SourceType.upload,
+            source_ref=name,
+            content_type=content_type,
+            byte_size=len(text.encode("utf-8")),
+            chunks=await self._embed_chunks(text),
+        )
+        self.session.add(doc)
+        await self.session.commit()
+        return doc

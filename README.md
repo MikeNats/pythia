@@ -18,6 +18,7 @@ Pythia is a **RAG** API. You feed it documents — uploaded files or web pages �
 - **Audit trail** — every request, LLM call, and tool call is logged with a correlation id.
 - **Evals** — a golden-set harness scores answer quality (LLM-as-judge, with an adversarial second opinion).
 - **Multi-tenant auth** — Bearer API keys, stored hashed, scoped to a tenant.
+- **MCP server** — exposes retrieval + ingest as [Model Context Protocol](https://modelcontextprotocol.io) tools at `/mcp`, behind the same Bearer auth, so Claude Desktop (or any MCP client) can use your docs.
 
 ## Stack
 
@@ -90,16 +91,42 @@ For a conversation that remembers earlier turns, call `/search/chat` and reuse t
 
 ### The main routes
 
-| Method | Path                        | What                              |
-| ------ | --------------------------- | --------------------------------- |
-| POST   | `/ingest/web`             | ingest documents from URLs        |
-| POST   | `/ingest/upload`          | ingest uploaded files (PDF, text) |
-| POST   | `/search/question`        | one-shot question → cited answer |
-| POST   | `/search/chat`            | agentic chat with memory          |
-| GET    | `/search/conversations`   | list your conversations           |
-| GET    | `/healthz` · `/readyz` | liveness · readiness             |
+| Method | Path                        | What                                          |
+| ------ | --------------------------- | --------------------------------------------- |
+| POST   | `/ingest/web`             | ingest documents from URLs                    |
+| POST   | `/ingest/upload`          | ingest uploaded files (PDF, text)             |
+| POST   | `/search/question`        | one-shot question → cited answer             |
+| POST   | `/search/chat`            | agentic chat with memory                      |
+| GET    | `/search/conversations`   | list your conversations                       |
+| POST   | `/mcp`                    | MCP JSON-RPC (`tools/list`, `tools/call`) |
+| GET    | `/healthz` · `/readyz` | liveness · readiness                         |
 
 Interactive API docs live at `/docs` once the server is running.
+
+## MCP client
+
+Pythia  expose a mcp server at `POST /mcp`, behind the **same Bearer auth** as every other route. An MCP client connects, discovers the tools, and calls them — the client's *own* model writes the final answer.
+
+**Tools exposed:**
+
+| Tool            | What                                                                |
+| --------------- | ------------------------------------------------------------------- |
+| `search_docs` | retrieve the chunks relevant to a query, with document ids + scores |
+| `ingest_md`   | add a markdown / plain-text document to the knowledge base          |
+
+Every call is authenticated with your Bearer key and tenant-scoped — exactly like the REST routes.
+
+```bash
+KEY="paste-the-key-from-db-seed"
+
+# list the tools the server exposes
+curl -X POST localhost:8000/mcp \
+  -H "Authorization: Bearer $KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}'
+```
+
+No SDK — the JSON-RPC (`initialize` / `tools/list` / `tools/call`) is implemented directly, so the protocol is fully visible in `app/mcp/`.
 
 ## Working on it
 
